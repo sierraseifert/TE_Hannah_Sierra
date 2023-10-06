@@ -1,0 +1,80 @@
+##Steps for running RepeatMasker on the cluster via a sbatch job (for Sierra to do on own)
+
+# comments are with hashtag, commands to run will not have #
+
+# (1) add ncbi-datasets environment
+# log onto the cluster and type these commands
+
+srun -c 2 --pty bash -i
+
+conda create -n ncbi_datasets
+
+conda activate ncbi_datasets
+
+conda install -c conda-forge ncbi-datasets-cli
+
+# (2) make a work directory to store the genome information
+# type these commands
+
+cd /work
+
+mkdir yournetID
+
+cd yournetID
+
+mkdir RepeatMask
+
+# (3) Download a genome from NCBI to run RepeatMasker on
+#change the accession number for a genome/chromosome you are interested in from this website - https://www.ncbi.nlm.nih.gov/datasets/
+#change the file name to mirror that genome/chromosome
+
+datasets download genome accession GCF_000165445.2 --chromosomes 22  --filename Mic_mur_chrom22.zip
+
+conda deactivate #this turns off the ncbi_datasets environment
+
+exit #this takes you out of the interactive session
+
+# (4) unzip the file
+
+unzip filename
+
+# (5) locate the .fna file 
+
+cd data
+
+ls
+
+cd accessiondirectory #need to specify the directory, this will be something like GCF_000165445.2
+
+ls #copy the name of the .fna file in here to use in the script
+
+pwd #add the name of the .fna file to the end of this for the script **
+
+# (6) prep script for sending to the cluster
+
+cd /work/yournetID/RepeatMask
+
+mkdir scripts
+
+cd scripts
+
+nano RepeatMaskChromosomeNum.sh #edit this to mirror the chromosome and species you chose
+
+# (7) once in nano command, copy and paste the RepeatMask.sh file and edit your path under
+# command with path to edit: RepeatMasker -s -pa 4 -a -species primate ncbi_dataset/data/GCF_000165445.2/chr22.fna (** from step 5)
+# edit the top of the document to have your email and not mine
+# edit the *** in error and output at the top to mirror your chromosome number (ie. RepeatMask22)
+
+# (8) prepare the log directory before running the command
+# hit control x to exit nano and press save
+
+cd ..
+
+mkdir log
+
+# (9) run your script!
+
+sbatch scripts/RepeatMaskChromosomeNum.sh #this should be able to be tab completed if you formated it right!
+
+
+

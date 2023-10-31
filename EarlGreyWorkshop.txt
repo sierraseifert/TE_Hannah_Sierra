@@ -1,0 +1,240 @@
+EarlGrey Workshop
+
+> more than 115 methods
+- Library-based methods (RepeatMasker)
+- De-novo (RepeatModeler, RepeatModeler2, REPERT)
+- Structure-based (LTRHarvest, LTR-FINDER)
+
+Large differences in quality of annotation based on the underlying questions/needs
+
+-RepeatMasker was designed to improve DOWNSTREAM annotation
+- Paywalls! Repbase is expensive (best consensus database)
+- Dfam is improving rapidly but has issues with curation (v3.7) most 
+of the sequences are not curated!!, highly recommends curated versions of Dfam
+- De-novo tools are bad at family level classification, 'unknown'
+- Annotations struggle with fragmentation (due to selection & pseudogenization, can inflate TE count)
+
+^ challenges EarlGrey tries to overcome
+
+EarlGrey is
+1. User-friendly & easy to install & run
+- multiple ways to install
+2. Facilitate automated TE annotation
+- not replacing manual curation, but closing the gap
+3. Meet the challenges of TE annotation
+- define TE boundaries
+- reduce TE annotation fragmentation
+4. Not dependent on premium databases
+5. Run fast and multithreads
+
+15 independent stages in the pipeline
+
+1. Preparation of input genome
+- back up original genome file & compresses it
+- replaces long header names & creates directory & makes a dictionary with terms
+- replaces ambiguous codes with N
+- results in .prep file
+2. OPTIONAL masking of known repeats
+- can mask repeats you already know
+- specified with the -r flag for a genus
+- specified with the -l flag for own libraries
+- useful if you have a very closely related species with a good pre existing library
+- useful if you have multiple individuals of a species and run EarlGrey in serial annotation
+- NOT useful when you want a quick annotation
+3. De-novo TE identification
+- RepeatModeler2 performs all by all genome alignment
+- rate limiting step (more compute power the better)
+- will classify anything it finds, depends on what database your repeatmasker is using
+- imput is .prep file or hard-masked version
+- output is TE consensus library (most should be TEs)
+- Starting point for manual curation
+4. Verifying RepeatModeler2
+- RepeatModeler2 can fail on some genome assemblies
+- EarlGrey will check that the results are present, and if not it will re-run RepeatModeler & drop number of stages
+5. BEAT (blast, extend, align, trim)
+-ensures extended consensus sequences are an improvement
+- every TE consensus is treated the same way (reproducibility)
+- iterative until no more improvement
+- TEstrainer steps:
+> BLAST: identifies TE family using BLASTN (-task dc-megablast)
+>> select copies >70% pairwise identity and >50% query coverage
+>> take top 20 copies based on bitscore to improve consensus
+> Extend, align (extend flanks by 1,000bp and create multiple alignment using MAFFT)
+> Trim (reads columns of alignment, discards columns with singletons)
+>> check all sequences align to startng consensus with >50% coverage
+>> generate new alignment without starting consensus sequence & make majority rule sequence
+>> align consensus to starting consensus to make sure it represents the original
+>> if new sequences is shorter or <80% coverage then new sequence is worse than original
+>> if new consensus is longer but by <50% of flank extension size then it is improved compared to the original
+>> if new consensus is longer but by >50% then it is improved but there is potential for further improvement & will go back to BEAT
+- default max rounds is 10
+> Satellites and tandem repeats
+>> can be extended in several rounds
+>> MREPS, SASSR, TRF find these regions
+>> if consensus is >50% tandem repeat it is classified as a satellite/simple repeat
+>> non-tandem repeats with >3 copies of repeat at either flank are trimmed and retain 1 copy at each end
+>> fixes LINEs and SINEs with long satellite tails
+> reclassification of TE consensi
+>> classification module from RepeatModeler2 (depends on database)
+>> reduces number of unknown sequences
+6. OPTIONAL Reduce TE library
+- can cluster sequences to 80-80-80 rule (80% identity, 80% total length, 80bp)
+- use caution! (can hide TE families that have different evolutionary trajectories)
+- can remove chimeric repeats (ie. ERV!!)
+7. OPTIONAL Combine TE libraries
+- if you used initial repeatmasker step will generate combined library for final annotation
+8. Annotation of Input Genome Assembly
+- TEs in original input genome are identified and masked w/sensitive search
+- will annotate TEs that EarlGrey has curated
+- potentially fragmented & some missing larger elements (LTR)
+9. Identification of full-length LTR elements
+- generate best possible automatic TE annotation for input genome
+- LTR_FINDER
+10-12. Repeat Defragmentation
+- RepeatCraft loose merge mode
+- determines whether fragments are likely to have come from the same insertion followed by degradation or from different insertions
+- incorporates information on full-length LTR elements
+- compares LTR_FINDER results to repeatmasker results
+13. Final filtering
+- resolve overlapping annotations
+- it is impossible for a single base to belong to multiple TEs
+- remove annotations <100bp
+14. Summarizing results
+- generate summary plots to show TE content and relative activity
+- shorter Kimura distance means more recent TE activity!
+- Kimura divergence is just how much it differs from consensus
+- should see improved consensus library (.strained) --> can use for manual curation & also if you are looking at more genomes from the same species this is the starting point
+- final TE annotation (BED .bed & GFF3 .gff tells distinct family)
+- high-level TE quantification (# and coverage of main TE classifications highLevelCount.txt)
+- family level TE quantification (same but for families)
+
+Benefits of EarlGrey
+- Improved performance over a raw RepeatModeler2 run
+- Manual curation is still the gold standard, but this will get you close
+- Reproducibility!! all annotations are treated equally
+- More complete annotations
+- Standard output formats
+
+Use Cases
+- Annotating TEs and masking them for gene annotation (can replace RepeatMasker)
+- Quantifying TEs in new genome assembly
+- Comparative analyses of TE content and diversity among large numbers of individuals/species
+- Builds new species-specific TE libraries (recommend serial approach)
+- Headstart for manual curation
+
+Benefits of Improved TE annotation
+- Individual libraries for individual species (many TEs are lineage specific)
+- Better libraries will enable better TE prediction
+
+https://github.com/TobyBaril/EarlGrey
+
+
+
+**answer about genome quality: the dream is T2T long read assembly,
+>> hardest part to assembly are TEs and looking at TE polymorphism in short reads
+>> lucky to get 70% in short reads
+>> best genome you have is good, annotated TEs and BUSCO scores
+>> look at correlation of N50 and TE content (hope to see no correlation)
+>> 
+
+working on dealing with multiple gene copies
+if genome is bigger than 240MB it will run different parts of the genome at different times
+
+
+
+
+
+
+{ curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-$(uname)-$(uname -m).sh"; bash Mambaforge-$(uname)-$(uname -m).sh -b -p /workspace/conda && rm Mambaforge-$(uname)-$(uname -m).sh; /workspace/conda/bin/mamba init bash source ${HOME}/.bashrc mamba create -n earlGrey -c conda-forge -c bioconda   python=3.8 hmmer trf cd-hit genometools-genometools   pandas ncls=0.0.64 pyfaidx pyranges parallel -y mamba clean --all -y mamba install -n earlGrey -c conda-forge -c bioconda   repeatmasker ltr_retriever mafft ninja-nj repeatscout recon repeatmodeler -y mamba clean --all -y mamba install -n earlGrey -c bioconda bioconductor-genomeinfodb bioconductor-genomeinfodbdata -y; mamba install -n earlGrey -c bioconda bioconductor-bsgenome bioconductor-plyranges -y; mamba install -n earlGrey -c conda-forge r-ape r-optparse r-tidyverse r-plyr -y mamba clean --all -y mamba activate earlGrey cd /workspace; git clone https://github.com/TobyBaril/EarlGrey; cd EarlGrey
+sed -i.bak 's/RepeatClassifier -pa ${THREADS} /RepeatClassifier /' scripts/TEstrainer/TEstrainer_for_earlGrey.sh; sed -i.bak 's/RepeatClassifier -pa ${THREADS} /RepeatClassifier /' scripts/TEstrainer/TEstrainer chmod +x ./earlGrey echo "Setting path variables in script"; SCRIPT_DIR=$(realpath ./scripts/); sed -i "s|SCRIPT_DIR=.*|SCRIPT_DIR=${SCRIPT_DIR}|g" ./earlGrey; sed -i "s|SCRIPT_DIR=.*|SCRIPT_DIR=${SCRIPT_DIR}|g" ./scripts/rcMergeRepeat*; sed -i "s|SCRIPT_DIR=.*|SCRIPT_DIR=${SCRIPT_DIR}|g" ./scripts/headSwap.sh; sed -i "s|SCRIPT_DIR=.*|SCRIPT_DIR=${SCRIPT_DIR}|g" ./scripts/autoPie.sh; sed -i "s|INSERT_FILENAME_HERE|${SCRIPT_DIR}/TEstrainer/scripts/|g" ./scripts/TEstrainer/TEstrainer_for_earlGrey.sh; chmod +x ${SCRIPT_DIR}/TEstrainer/TEstrainer_for_earlGrey.sh; chmod +x ${SCRIPT_DIR}/* > /dev/null 2>&1; chmod +x ${SCRIPT_DIR}/bin/LTR_FINDER.x86_64-1.0.7/ltr_finder; chmod a+w ${SCRIPT_DIR}/repeatCraft/example/; chmod +x ./modules/trf409.linux64; echo "Path variables set" echo "Installing sa-ssr"; cd ${SCRIPT_DIR} && chmod a+w ${SCRIPT_DIR}; git clone https://github.com/ridgelab/SA-SSR && cd ./SA-SSR/; sed -i "s|PREFIX=/usr/local/bin|PREFIX=${SCRIPT_DIR}|g" Makefile && make && make install; sed -i "s|sa-ssr|${SCRIPT_DIR}/sa-ssr|g" ${SCRIPT_DIR}/TEstrainer/TEstrainer_for_earlGrey.sh; sed -i "s|txt trf|txt $(which trf)|g" ${SCRIPT_DIR}/TEstrainer/TEstrainer_for_earlGrey.sh; cd ${SCRIPT_DIR}
+echo "Extracting zip archives"; tar -zxf ${SCRIPT_DIR}/bin/LTR_FINDER.x86_64-1.0.7/tRNAdb.tar.gz --directory ${SCRIPT_DIR}/bin/LTR_FINDER.x86_64-1.0.7/; echo "Extracted required archives"
+echo "Remember to activate the earl grey conda environment before running earlGrey"; export PATH=$PATH:$(realpath .); echo "earlGrey is ready to use. To execute from any directory, add earlGrey to path by pasting the code (minus the square brackets) below..."; echo '[export PATH=$PATH:$(realpath .)]'; cd /workspace/EarlGrey; export PATH=$PATH:$(realpath .); export PERL5LIB=/workspace/conda/envs/earlGrey/share/RepeatMasker/:$PERL5LIB cd /workspace; wget https://sk13.cog.sanger.ac.uk/NC_045808_EarlWorkshop.fasta }; exit
+
+
+curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-$(uname)-$(uname -m).sh"
+bash Mambaforge-$(uname)-$(uname -m).sh -b -p /workspace/conda && rm Mambaforge-$(uname)-$(uname -m).sh
+/workspace/conda/bin/mamba init bash
+
+source ${HOME}/.bashrc
+
+mamba create -n earlGrey -c conda-forge -c bioconda \
+  python=3.8 hmmer trf cd-hit genometools-genometools \
+  pandas ncls=0.0.64 pyfaidx pyranges parallel -y
+
+mamba clean --all -y
+
+mamba install -n earlGrey -c conda-forge -c bioconda \
+  repeatmasker ltr_retriever mafft ninja-nj repeatscout recon repeatmodeler -y
+
+mamba clean --all -y
+
+mamba install -n earlGrey -c bioconda bioconductor-genomeinfodb bioconductor-genomeinfodbdata -y
+mamba install -n earlGrey -c bioconda bioconductor-bsgenome bioconductor-plyranges -y
+mamba install -n earlGrey -c conda-forge r-ape r-optparse r-tidyverse r-plyr -y
+
+mamba clean --all -y
+
+mamba activate earlGrey
+
+cd /workspace
+git clone https://github.com/TobyBaril/EarlGrey
+cd EarlGrey
+
+# remove -pa
+sed -i.bak 's/RepeatClassifier -pa ${THREADS} /RepeatClassifier /' scripts/TEstrainer/TEstrainer_for_earlGrey.sh
+sed -i.bak 's/RepeatClassifier -pa ${THREADS} /RepeatClassifier /' scripts/TEstrainer/TEstrainer
+
+chmod +x ./earlGrey
+
+# set paths in Earl Grey Script
+
+echo "Setting path variables in script"
+SCRIPT_DIR=$(realpath ./scripts/)
+sed -i "s|SCRIPT_DIR=.*|SCRIPT_DIR=${SCRIPT_DIR}|g" ./earlGrey
+sed -i "s|SCRIPT_DIR=.*|SCRIPT_DIR=${SCRIPT_DIR}|g" ./scripts/rcMergeRepeat*
+sed -i "s|SCRIPT_DIR=.*|SCRIPT_DIR=${SCRIPT_DIR}|g" ./scripts/headSwap.sh
+sed -i "s|SCRIPT_DIR=.*|SCRIPT_DIR=${SCRIPT_DIR}|g" ./scripts/autoPie.sh
+sed -i "s|INSERT_FILENAME_HERE|${SCRIPT_DIR}/TEstrainer/scripts/|g" ./scripts/TEstrainer/TEstrainer_for_earlGrey.sh
+chmod +x ${SCRIPT_DIR}/TEstrainer/TEstrainer_for_earlGrey.sh
+chmod +x ${SCRIPT_DIR}/* > /dev/null 2>&1
+chmod +x ${SCRIPT_DIR}/bin/LTR_FINDER.x86_64-1.0.7/ltr_finder
+chmod a+w ${SCRIPT_DIR}/repeatCraft/example/
+chmod +x ./modules/trf409.linux64
+echo "Path variables set"
+
+echo "Installing sa-ssr"
+cd ${SCRIPT_DIR} && chmod a+w ${SCRIPT_DIR}
+git clone https://github.com/ridgelab/SA-SSR && cd ./SA-SSR/
+sed -i "s|PREFIX=/usr/local/bin|PREFIX=${SCRIPT_DIR}|g" Makefile && make && make install
+sed -i "s|sa-ssr|${SCRIPT_DIR}/sa-ssr|g" ${SCRIPT_DIR}/TEstrainer/TEstrainer_for_earlGrey.sh
+sed -i "s|txt trf|txt $(which trf)|g" ${SCRIPT_DIR}/TEstrainer/TEstrainer_for_earlGrey.sh
+cd ${SCRIPT_DIR}
+
+# Extract tRNAdb
+echo "Extracting zip archives"
+tar -zxf ${SCRIPT_DIR}/bin/LTR_FINDER.x86_64-1.0.7/tRNAdb.tar.gz --directory ${SCRIPT_DIR}/bin/LTR_FINDER.x86_64-1.0.7/
+echo "Extracted required archives"
+
+# Message Complete
+echo "Remember to activate the earl grey conda environment before running earlGrey"
+export PATH=$PATH:$(realpath .)
+echo "earlGrey is ready to use. To execute from any directory, add earlGrey to path by pasting the code (minus the square brackets) below..."
+echo '[export PATH=$PATH:$(realpath .)]'
+cd /workspace/EarlGrey
+export PATH=$PATH:$(realpath .)
+export PERL5LIB=/workspace/conda/envs/earlGrey/share/RepeatMasker/:$PERL5LIB
+
+cd /workspace
+wget https://sk13.cog.sanger.ac.uk/NC_045808_EarlWorkshop.fasta
+
+/workspace/conda/bin/mamba init bash
+source ~/.bashrc
+mamba activate earlGrey
+cd /workspace/EarlGrey
+export PATH=$PATH:$(realpath .)
+export PERL5LIB=/workspace/conda/envs/earlGrey/share/RepeatMasker/:$PERL5LIB
+cd /workspace
+clear
+
+
+https://gitpod.io/#https://github.com/BGAcademy23/earlgrey-te
